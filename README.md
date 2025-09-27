@@ -68,7 +68,7 @@ backend/
 
 1. Clone repo:
    ```bash
-   git clone [https://github.com/your-org/ueba-fraud.git](https://github.com/Santoshs0293/-BOB_Hackathon.git)
+   git clone https://github.com/Santoshs0293/-BOB_Hackathon.git
    cd backend
    ```
 
@@ -220,4 +220,5 @@ This will:
 ## 🤝 Contributors
 
 * **Santosh Kumar Singh** – PhD Scholar, IIT Kanpur
+
 
