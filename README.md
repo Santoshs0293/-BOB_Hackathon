@@ -1,7 +1,8 @@
 # IITK_Bank
 
+---
 
-```
+```markdown
 #  CAI-Powered UEBA (Fraud Detection Platform)
 
 This project implements a **CPU-friendly prototype** of a CAI-Powered User & Entity Behavior Analytics (UEBA) system.  
