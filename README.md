@@ -1,11 +1,7 @@
 # IITK_Bank
-Here you go ✅ — I’ve generated the **`README.md`** file content exactly as a Markdown file so you can download it directly.
 
-Save this as **`README.md`** in your project root (`backend/`).
 
----
-
-```markdown
+```
 #  CAI-Powered UEBA (Fraud Detection Platform)
 
 This project implements a **CPU-friendly prototype** of a CAI-Powered User & Entity Behavior Analytics (UEBA) system.  
@@ -238,3 +234,4 @@ This will:
 
 * **Santosh Kumar Singh** – PhD Scholar, IIT Kanpur
 ```
+
