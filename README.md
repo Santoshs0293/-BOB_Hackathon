@@ -1,7 +1,3 @@
-# IITK_Bank
-
-
-```markdown
 #  CAI-Powered UEBA (Fraud Detection Platform)
 
 This project implements a **CPU-friendly prototype** of a CAI-Powered User & Entity Behavior Analytics (UEBA) system.  
@@ -37,7 +33,6 @@ It integrates **rule-based detection, anomaly ML (IsolationForest), graph heuris
 ## 📂 Project Structure
 
 ```
-
 backend/
 │── src/app/
 │   ├── main.py              # FastAPI entrypoint
@@ -58,7 +53,6 @@ backend/
 ├── client.py                # End-to-end test client
 ├── requirements.txt         # Python dependencies
 └── README.md                # This file
-
 ```
 
 
@@ -76,7 +70,6 @@ backend/
    ```bash
    git clone https://github.com/your-org/ueba-fraud.git
    cd backend
-
    ```
 
 2. Create venv & install deps:
@@ -86,7 +79,6 @@ backend/
    source venv/bin/activate
    pip install -r requirements.txt
    pip install -r requirements.txt --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host=files.pythonhosted.org
-
    ```
 
 3. Configure `.env` file:
@@ -174,9 +166,7 @@ This will:
 1. **Ingest a suspicious transaction**
 
    ```bash
-   curl -X POST http://127.0.0.1:8000/transactions/ingest \
-   -H "Content-Type: application/json" \
-   -d '{"account_number":"123456789","amount":120000,"currency":"INR","merchant":"Flipkart","device":{"device_id":"dev-1"},"metadata":{"geo":"india"}}'
+   curl -X POST http://127.0.0.1:8000/transactions/ingest    -H "Content-Type: application/json"    -d '{"account_number":"123456789","amount":120000,"currency":"INR","merchant":"Flipkart","device":{"device_id":"dev-1"},"metadata":{"geo":"india"}}'
    ```
 
 2. **Check recent transactions**
@@ -230,7 +220,3 @@ This will:
 ## 🤝 Contributors
 
 * **Santosh Kumar Singh** – PhD Scholar, IIT Kanpur
-```
-
-
-
