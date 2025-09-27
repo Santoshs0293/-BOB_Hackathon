@@ -1,6 +1,5 @@
 # IITK_Bank
 
----
 
 ```markdown
 #  CAI-Powered UEBA (Fraud Detection Platform)
@@ -60,7 +59,7 @@ backend/
 ├── requirements.txt         # Python dependencies
 └── README.md                # This file
 
-````
+```
 
 
 ## ⚙️ Requirements
@@ -70,14 +69,15 @@ backend/
 - **Redis** (for feedback queue)
 - **Virtual environment recommended**
 
-
+---
 ## 🔧 Setup
 
 1. Clone repo:
    ```bash
    git clone https://github.com/your-org/ueba-fraud.git
    cd backend
-````
+
+   ```
 
 2. Create venv & install deps:
 
@@ -231,5 +231,6 @@ This will:
 
 * **Santosh Kumar Singh** – PhD Scholar, IIT Kanpur
 ```
+
 
 
