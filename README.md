@@ -8,7 +8,6 @@
 This project implements a **CPU-friendly prototype** of a CAI-Powered User & Entity Behavior Analytics (UEBA) system.  
 It integrates **rule-based detection, anomaly ML (IsolationForest), graph heuristics, causal analysis stubs, and analyst feedback loops**.  
 
----
 
 ##  Features
 
@@ -35,7 +34,6 @@ It integrates **rule-based detection, anomaly ML (IsolationForest), graph heuris
   - Submits feedback
   - Runs batch tests with multiple conditions
 
----
 
 ## 📂 Project Structure
 
@@ -64,7 +62,6 @@ backend/
 
 ````
 
----
 
 ## ⚙️ Requirements
 
@@ -73,7 +70,6 @@ backend/
 - **Redis** (for feedback queue)
 - **Virtual environment recommended**
 
----
 
 ## 🔧 Setup
 
@@ -235,4 +231,5 @@ This will:
 
 * **Santosh Kumar Singh** – PhD Scholar, IIT Kanpur
 ```
+
 
