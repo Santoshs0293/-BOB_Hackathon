@@ -1,0 +1,14 @@
+fastapi
+uvicorn[standard]
+motor
+pydantic
+redis
+aioredis
+python-dotenv
+scikit-learn
+networkx
+pytest
+httpx
+gensim
+pandas
+dowhy
