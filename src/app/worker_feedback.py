@@ -32,13 +32,14 @@ async def process_feedback_loop():
             print(f"📥 Feedback received: tx_id={tx_id}, label={label}")
 
             # Save feedback into a dedicated collection
-            await db.feedbacks.insert_one({
-                "tx_id": tx_id,
+            await db.feedback.insert_one({
+                "tx_id": ObjectId(tx_id),   # store as proper ObjectId
                 "label": label,
                 "analyst": analyst,
                 "notes": notes,
-                "created_at": scoring.datetime.utcnow()
+                "timestamp": scoring.datetime.utcnow()
             })
+
 
             # Fetch transaction from Mongo
             tx = await db.transactions.find_one({"_id": ObjectId(tx_id)})

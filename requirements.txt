@@ -12,3 +12,4 @@ httpx
 gensim
 pandas
 dowhy
+tabulate

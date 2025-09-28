@@ -1,5 +1,4 @@
-from fastapi import APIRouter, BackgroundTasks, HTTPException
-from fastapi import status
+from fastapi import APIRouter, HTTPException, status
 from fastapi.responses import JSONResponse
 from typing import Optional, Dict, Any
 from bson import ObjectId
@@ -7,12 +6,14 @@ from datetime import datetime
 from .. import schemas
 from ..database import db
 from .. import scoring
-import asyncio
+from ..explainability import synthesize_explanation
 import json
 
 router = APIRouter(prefix="/transactions", tags=["transactions"])
 
+# ------------------------------------------
 # Helper: convert Mongo doc to API-safe dict
+# ------------------------------------------
 def _tx_to_out(tx_doc: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "id": str(tx_doc.get("_id")),
@@ -25,19 +26,19 @@ def _tx_to_out(tx_doc: Dict[str, Any]) -> Dict[str, Any]:
         "score": float(tx_doc.get("score", 0.0)),
         "verdict": tx_doc.get("verdict", "unknown"),
         "explanation": tx_doc.get("explanation"),
-        "causal_summary": tx_doc.get("causal_summary")
+        "causal_summary": tx_doc.get("causal_summary"),
+        "top_graph_suspicious": tx_doc.get("top_graph_suspicious"),
+        "graph_features": tx_doc.get("graph_features", {}),
+        "analyst_label": tx_doc.get("analyst_label"),
+        "analyst_notes": tx_doc.get("analyst_notes")
     }
 
-# Create transaction, run full_score synchronously (await) and persist explanation & causal summary
+
+# ------------------------------------------------------
+# Create transaction, run full_score, persist explanation
+# ------------------------------------------------------
 @router.post("/ingest", response_model=schemas.TransactionOut)
 async def ingest_transaction(tx_in: schemas.TransactionIn):
-    """
-    Ingest a transaction, run full scoring pipeline (rules + ml + graph + causal),
-    store result and return final scoring + explanation & causal summary.
-    Note: running full_score here means the API waits until scoring finishes (useful for demo).
-    For high-throughput systems you can keep a fast-path and compute full_score in background.
-    """
-    # 1) persist optimistic record (score 0, verdict unknown) with timestamp
     tx_doc = {
         "account_number": tx_in.account_number,
         "amount": float(tx_in.amount),
@@ -48,25 +49,27 @@ async def ingest_transaction(tx_in: schemas.TransactionIn):
         "score": 0.0,
         "verdict": "unknown",
         "explanation": None,
-        "causal_summary": None
+        "causal_summary": None,
+        "top_graph_suspicious": None,
+        "graph_features": {}
     }
     res = await db.transactions.insert_one(tx_doc)
     tx_id = res.inserted_id
 
-    # 2) add graph edge immediately if device is present (helps graph scoring)
+    # Add graph edge immediately if device present
     try:
         device = tx_in.device
-        if device:
-            # use simple add_edge (synchronous; graph is in-memory)
+        if device and device.device_id:
             from ..graph_store import add_edge
             add_edge("account", tx_in.account_number, "device", device.device_id)
-            # also record device id into metadata for persistence
-            await db.transactions.update_one({"_id": tx_id}, {"$set": {"metadata.device_id": device.device_id}})
+            await db.transactions.update_one(
+                {"_id": tx_id},
+                {"$set": {"metadata.device_id": device.device_id}}
+            )
     except Exception:
-        # non-fatal - continue scoring even if graph update fails
         pass
 
-    # 3) Prepare tx for scoring
+    # Prepare tx for scoring
     tx_for_scoring = {
         "account_number": tx_in.account_number,
         "amount": float(tx_in.amount),
@@ -74,38 +77,49 @@ async def ingest_transaction(tx_in: schemas.TransactionIn):
         "timestamp": datetime.utcnow(),
         "metadata": tx_in.metadata or {}
     }
-    # if device present, place in metadata for scoring
     if tx_in.device and tx_in.device.device_id:
         tx_for_scoring["metadata"]["device_id"] = tx_in.device.device_id
 
-    # 4) Run full_score (async). This returns score, verdict, explanation, causal_summary, top_graph_suspicious
+    # Run scoring
     try:
         score_result = await scoring.full_score(tx_for_scoring)
     except Exception as e:
-        # If scoring fails, return allowed optimistic response but log the error in DB
-        await db.transactions.update_one({"_id": tx_id}, {"$set": {"scoring_error": str(e)}})
+        await db.transactions.update_one(
+            {"_id": tx_id}, {"$set": {"scoring_error": str(e)}}
+        )
         raise HTTPException(status_code=500, detail=f"Scoring failed: {e}")
 
-    # 5) Persist the results into Mongo
+    # Build explanation text (human-friendly, with graph highlight)
+    explanation = synthesize_explanation(
+        tx_for_scoring["account_number"],
+        tx_for_scoring,
+        rules_score=score_result.get("rules_score", 0.0),
+        ml_score=score_result.get("ml_score", 0.0),
+        graph_score=score_result.get("graph_score", 0.0),
+        causal_summary=score_result.get("causal_summary", {}),
+        top_graph_suspicious=score_result.get("top_graph_suspicious", [])
+    )
+
+    # Persist scoring outputs
     update_payload = {
         "score": float(score_result.get("score", 0.0)),
         "verdict": score_result.get("verdict", "unknown"),
-        "explanation": score_result.get("explanation"),
+        "explanation": explanation,
         "causal_summary": score_result.get("causal_summary"),
-        "top_graph_suspicious": score_result.get("top_graph_suspicious")
+        "top_graph_suspicious": score_result.get("top_graph_suspicious"),
+        "graph_features": score_result.get("graph_features", {})
     }
     await db.transactions.update_one({"_id": tx_id}, {"$set": update_payload})
 
-    # 6) Return the stored object (fresh)
     saved = await db.transactions.find_one({"_id": tx_id})
     return _tx_to_out(saved)
 
 
+# ---------------------------------
+# Recent transactions (for UI list)
+# ---------------------------------
 @router.get("/recent")
 async def recent_transactions(limit: int = 20):
-    """
-    Return recent transactions (most recent first). Useful for UI list.
-    """
     cursor = db.transactions.find().sort("timestamp", -1).limit(int(limit))
     results = []
     async for tx in cursor:
@@ -113,11 +127,11 @@ async def recent_transactions(limit: int = 20):
     return results
 
 
+# ----------------------------------------
+# Get explanation for a single transaction
+# ----------------------------------------
 @router.get("/explain/{tx_id}")
 async def get_explanation(tx_id: str):
-    """
-    Return the explanation + causal summary for a transaction (if present).
-    """
     try:
         oid = ObjectId(tx_id)
     except Exception:
@@ -126,28 +140,19 @@ async def get_explanation(tx_id: str):
     tx = await db.transactions.find_one({"_id": oid})
     if not tx:
         raise HTTPException(status_code=404, detail="transaction not found")
-    return {
-        "id": str(tx["_id"]),
-        "account_number": tx.get("account_number"),
-        "score": float(tx.get("score", 0.0)),
-        "verdict": tx.get("verdict"),
-        "explanation": tx.get("explanation"),
-        "causal_summary": tx.get("causal_summary"),
-        "top_graph_suspicious": tx.get("top_graph_suspicious")
-    }
+    return _tx_to_out(tx)
 
 
+# -----------------------
+# Analyst feedback API
+# -----------------------
 @router.post("/feedback", status_code=status.HTTP_201_CREATED)
-async def feedback(tx_id: str, analyst: Optional[str] = None, label: Optional[str] = None, notes: Optional[str] = None):
-    """
-    Analyst feedback endpoint:
-    - tx_id: id of the transaction (string)
-    - analyst: optional analyst id/email
-    - label: analyst label (e.g., 'fraud', 'legit', 'suspicious')
-    - notes: free text notes
-
-    This stores the feedback and also writes a simple retrain flag in Redis so a background job can pick it up.
-    """
+async def feedback(
+    tx_id: str,
+    analyst: Optional[str] = None,
+    label: Optional[str] = None,
+    notes: Optional[str] = None
+):
     try:
         oid = ObjectId(tx_id)
     except Exception:
@@ -158,29 +163,36 @@ async def feedback(tx_id: str, analyst: Optional[str] = None, label: Optional[st
         raise HTTPException(status_code=404, detail="transaction not found")
 
     fb = {
-        "tx_id": oid,
+        "tx_id": str(oid),
         "account_number": tx.get("account_number"),
         "analyst": analyst,
         "label": label,
         "notes": notes,
         "timestamp": datetime.utcnow()
     }
+    # store in singular collection only
     await db.feedback.insert_one(fb)
 
-    # write a retrain flag into Redis (simple queue key). Use a list push so a worker can pop.
+    # push retrain flag into redis
     try:
         import redis
         from ..config import settings
         r = redis.from_url(settings.REDIS_URL)
-        # store a small JSON with tx id and label
-        r.lpush("ueba:feedback_queue", json.dumps({"tx_id": str(oid), "label": label, "analyst": analyst}))
+        r.lpush(
+            "ueba:feedback_queue",
+            json.dumps({"tx_id": str(oid), "label": label, "analyst": analyst, "notes": notes})
+        )
     except Exception:
-        # not fatal; just continue
         pass
 
-    # Optionally update the original transaction verdict to analyst label for traceability
+    # update transaction with analyst info
     if label:
-        await db.transactions.update_one({"_id": oid}, {"$set": {"analyst_label": label, "analyst_notes": notes}})
+        await db.transactions.update_one(
+            {"_id": oid},
+            {"$set": {"analyst_label": label, "analyst_notes": notes}}
+        )
 
-    return JSONResponse(status_code=status.HTTP_201_CREATED, content={"status": "ok", "tx_id": str(oid)})
-
+    return JSONResponse(
+        status_code=status.HTTP_201_CREATED,
+        content={"status": "ok", "tx_id": str(oid)}
+    )
